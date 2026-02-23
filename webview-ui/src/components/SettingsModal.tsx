@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { vscode } from '../vscodeApi.js'
+import { useState, useRef } from 'react'
+import { vscode } from '../wsClient.js'
 import { isSoundEnabled, setSoundEnabled } from '../notificationSound.js'
 
 interface SettingsModalProps {
@@ -27,11 +27,69 @@ const menuItemBase: React.CSSProperties = {
 export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode }: SettingsModalProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [soundLocal, setSoundLocal] = useState(isSoundEnabled)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!isOpen) return null
 
+  const handleExportLayout = async () => {
+    try {
+      const res = await fetch('/api/layout')
+      if (!res.ok) throw new Error('Failed to fetch layout')
+      const layout = await res.json()
+      const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'pixel-agents-layout.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Failed to export layout.')
+    }
+    onClose()
+  }
+
+  const handleImportLayout = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const imported = JSON.parse(reader.result as string) as Record<string, unknown>
+        if (imported.version !== 1 || !Array.isArray(imported.tiles)) {
+          alert('Invalid layout file.')
+          return
+        }
+        vscode.postMessage({ type: 'saveLayout', layout: imported })
+        // Also push to our own handler to reload
+        const event = new MessageEvent('message', { data: { type: 'layoutLoaded', layout: imported } })
+        window.dispatchEvent(event)
+      } catch {
+        alert('Failed to read or parse layout file.')
+      }
+    }
+    reader.readAsText(file)
+
+    // Reset input so the same file can be selected again
+    e.target.value = ''
+    onClose()
+  }
+
   return (
     <>
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        style={{ display: 'none' }}
+        onChange={handleFileSelected}
+      />
       {/* Dark backdrop — click to close */}
       <div
         onClick={onClose}
@@ -93,24 +151,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
         </div>
         {/* Menu items */}
         <button
-          onClick={() => {
-            vscode.postMessage({ type: 'openSessionsFolder' })
-            onClose()
-          }}
-          onMouseEnter={() => setHovered('sessions')}
-          onMouseLeave={() => setHovered(null)}
-          style={{
-            ...menuItemBase,
-            background: hovered === 'sessions' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-          }}
-        >
-          Open Sessions Folder
-        </button>
-        <button
-          onClick={() => {
-            vscode.postMessage({ type: 'exportLayout' })
-            onClose()
-          }}
+          onClick={handleExportLayout}
           onMouseEnter={() => setHovered('export')}
           onMouseLeave={() => setHovered(null)}
           style={{
@@ -121,10 +162,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
           Export Layout
         </button>
         <button
-          onClick={() => {
-            vscode.postMessage({ type: 'importLayout' })
-            onClose()
-          }}
+          onClick={handleImportLayout}
           onMouseEnter={() => setHovered('import')}
           onMouseLeave={() => setHovered(null)}
           style={{

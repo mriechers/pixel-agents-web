@@ -166,6 +166,35 @@ export class OfficeState {
     return null
   }
 
+  /** Find free seat closest to any existing team member (Manhattan distance) */
+  private findFreeSeatNearTeam(teamName: string): string | null {
+    // Find all characters in this team
+    const teamPositions: Array<{ col: number; row: number }> = []
+    for (const ch of this.characters.values()) {
+      if (ch.teamName === teamName) {
+        teamPositions.push({ col: ch.tileCol, row: ch.tileRow })
+      }
+    }
+    if (teamPositions.length === 0) return null
+
+    // Average team position as anchor
+    const avgCol = teamPositions.reduce((s, p) => s + p.col, 0) / teamPositions.length
+    const avgRow = teamPositions.reduce((s, p) => s + p.row, 0) / teamPositions.length
+
+    let bestSeatId: string | null = null
+    let bestDist = Infinity
+    for (const [uid, seat] of this.seats) {
+      if (!seat.assigned) {
+        const d = Math.abs(seat.seatCol - avgCol) + Math.abs(seat.seatRow - avgRow)
+        if (d < bestDist) {
+          bestDist = d
+          bestSeatId = uid
+        }
+      }
+    }
+    return bestSeatId
+  }
+
   /**
    * Pick a diverse palette for a new agent based on currently active agents.
    * First 6 agents each get a unique skin (random order). Beyond 6, skins
@@ -193,7 +222,7 @@ export class OfficeState {
     return { palette, hueShift }
   }
 
-  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean): void {
+  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, meta?: { model?: string; projectName?: string; gitBranch?: string; teamName?: string }): void {
     if (this.characters.has(id)) return
 
     let palette: number
@@ -207,13 +236,16 @@ export class OfficeState {
       hueShift = pick.hueShift
     }
 
-    // Try preferred seat first, then any free seat
+    // Try preferred seat first, then team-adjacent seat, then any free seat
     let seatId: string | null = null
     if (preferredSeatId && this.seats.has(preferredSeatId)) {
       const seat = this.seats.get(preferredSeatId)!
       if (!seat.assigned) {
         seatId = preferredSeatId
       }
+    }
+    if (!seatId && meta?.teamName) {
+      seatId = this.findFreeSeatNearTeam(meta.teamName)
     }
     if (!seatId) {
       seatId = this.findFreeSeat()
@@ -236,6 +268,12 @@ export class OfficeState {
       ch.tileRow = spawn.row
     }
 
+    if (meta) {
+      if (meta.model) ch.model = meta.model
+      if (meta.projectName) ch.projectName = meta.projectName
+      if (meta.gitBranch) ch.gitBranch = meta.gitBranch
+      if (meta.teamName) ch.teamName = meta.teamName
+    }
     if (!skipSpawnEffect) {
       ch.matrixEffect = 'spawn'
       ch.matrixEffectTimer = 0
@@ -355,7 +393,7 @@ export class OfficeState {
   }
 
   /** Create a sub-agent character with the parent's palette. Returns the sub-agent ID. */
-  addSubagent(parentAgentId: number, parentToolId: string): number {
+  addSubagent(parentAgentId: number, parentToolId: string, agentName?: string, teamName?: string): number {
     const key = `${parentAgentId}:${parentToolId}`
     if (this.subagentIdMap.has(key)) return this.subagentIdMap.get(key)!
 
@@ -410,6 +448,8 @@ export class OfficeState {
     }
     ch.isSubagent = true
     ch.parentAgentId = parentAgentId
+    if (agentName) ch.agentName = agentName
+    if (teamName) ch.teamName = teamName
     ch.matrixEffect = 'spawn'
     ch.matrixEffectTimer = 0
     ch.matrixEffectSeeds = matrixEffectSeeds()
@@ -489,6 +529,16 @@ export class OfficeState {
   /** Look up the sub-agent character ID for a given parent+toolId, or null */
   getSubagentId(parentAgentId: number, parentToolId: string): number | null {
     return this.subagentIdMap.get(`${parentAgentId}:${parentToolId}`) ?? null
+  }
+
+  /** Update metadata on an existing agent character */
+  updateAgentMeta(id: number, meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string }): void {
+    const ch = this.characters.get(id)
+    if (!ch) return
+    if (meta.model !== undefined) ch.model = meta.model
+    if (meta.projectName !== undefined) ch.projectName = meta.projectName
+    if (meta.gitBranch !== undefined) ch.gitBranch = meta.gitBranch
+    if (meta.teamName !== undefined) ch.teamName = meta.teamName
   }
 
   setAgentActive(id: number, active: boolean): void {

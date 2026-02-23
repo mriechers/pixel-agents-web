@@ -1,6 +1,6 @@
-# Contributing to Pixel Agents
+# Contributing to Pixel Agents Web
 
-Thanks for your interest in contributing to Pixel Agents! All contributions are welcome — features, bug fixes, documentation improvements, refactors, and more.
+Thanks for your interest in contributing to Pixel Agents Web! All contributions are welcome — features, bug fixes, documentation improvements, refactors, and more.
 
 This project is licensed under the [MIT License](LICENSE), so your contributions will be too. No CLA or DCO is required.
 
@@ -9,47 +9,62 @@ This project is licensed under the [MIT License](LICENSE), so your contributions
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (LTS recommended)
-- [VS Code](https://code.visualstudio.com/) (v1.109.0 or later)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed (for testing with real sessions)
 
 ### Setup
 
 ```bash
-git clone https://github.com/pablodelucca/pixel-agents.git
-cd pixel-agents
+git clone https://github.com/pablodelucca/pixel-agents-web.git
+cd pixel-agents-web
 npm install
 cd webview-ui && npm install && cd ..
 npm run build
+npm start
 ```
 
-Then press **F5** in VS Code to launch the Extension Development Host.
+Then open **http://localhost:3333** in your browser.
 
 ## Development Workflow
 
-For development with live rebuilds, run:
-
 ```bash
-npm run watch
+npm run build    # Build server + webview + copy assets
+npm start        # Start the server at localhost:3333
+npm run dev      # Build + start in one command
 ```
 
-This starts parallel watchers for both the extension backend (esbuild) and TypeScript type-checking.
-
-> **Note:** The webview (Vite) is not included in `watch` — after changing webview code, run `npm run build:webview` or the full `npm run build`.
+After changing code, rebuild and restart:
+```bash
+npm run build && npm start
+```
 
 ### Project Structure
 
 | Directory | Description |
 |---|---|
-| `src/` | Extension backend — Node.js, VS Code API |
+| `server/` | Standalone Node.js server — Express, WebSocket, JSONL watching |
 | `webview-ui/` | React + TypeScript frontend (separate Vite project) |
-| `scripts/` | Asset extraction and generation tooling |
-| `assets/` | Bundled sprites, catalog, and default layout |
+| `scripts/` | Asset extraction pipeline and build utilities |
+
+### Server Architecture
+
+The server (`server/`) replaces the VS Code extension host:
+
+- **`server.ts`** — Express HTTP + WebSocket server, asset loading, client state sync
+- **`fileWatcher.ts`** — JSONL file discovery, adoption, team member detection
+- **`transcriptParser.ts`** — JSONL line parsing, tool tracking, metadata extraction
+- **`assetLoader.ts`** — PNG parsing, sprite loading, catalog building
+- **`layoutPersistence.ts`** — Layout file I/O (`~/.pixel-agents/layout.json`)
+- **`wsManager.ts`** — WebSocket client management and broadcasting
+- **`timerManager.ts`** — Waiting/permission timer logic
+- **`types.ts`** — Shared interfaces (AgentState, MessageSink)
 
 ## Code Guidelines
+
 ### Constants
 
-**No unused locals or parameters** (`noUnusedLocals` and `noUnusedParameters` are enabled): All magic numbers and strings are centralized — don't add inline constants to source files:
+**No unused locals or parameters** (`noUnusedLocals` and `noUnusedParameters` are enabled). All magic numbers and strings are centralized — don't add inline constants to source files:
 
-- **Extension backend:** `src/constants.ts`
+- **Server:** `server/constants.ts`
 - **Webview:** `webview-ui/src/constants.ts`
 - **CSS variables:** `webview-ui/src/index.css` `:root` block (`--pixel-*` properties)
 
@@ -70,7 +85,7 @@ The project uses a pixel art aesthetic. All overlays should use:
    ```bash
    npm run build
    ```
-   This runs type-checking, linting, esbuild (extension), and Vite (webview).
+   This runs TypeScript compilation (server), Vite build (webview), and asset copying.
 4. Open a pull request against `main` with:
    - A clear description of what changed and why
    - How you tested the changes (steps to reproduce / verify)
@@ -78,16 +93,16 @@ The project uses a pixel art aesthetic. All overlays should use:
 
 ## Reporting Bugs
 
-[Open an issue](https://github.com/pablodelucca/pixel-agents/issues) with:
+[Open an issue](https://github.com/pablodelucca/pixel-agents-web/issues) with:
 
 - What you expected to happen
 - What actually happened
 - Steps to reproduce
-- VS Code version and OS
+- Node.js version, browser, and OS
 
 ## Feature Requests
 
-Have an idea? [Open an issue](https://github.com/pablodelucca/pixel-agents/issues) to discuss it before building. This helps avoid duplicate work and ensures the feature fits the project's direction.
+Have an idea? [Open an issue](https://github.com/pablodelucca/pixel-agents-web/issues) to discuss it before building. This helps avoid duplicate work and ensures the feature fits the project's direction.
 
 ## Code of Conduct
 

@@ -7,7 +7,7 @@ import { buildDynamicCatalog } from '../office/layout/furnitureCatalog.js'
 import { setFloorSprites } from '../office/floorTiles.js'
 import { setWallSprites } from '../office/wallTiles.js'
 import { setCharacterTemplates } from '../office/sprites/spriteData.js'
-import { vscode } from '../vscodeApi.js'
+import { vscode, addWsMessageHandler, removeWsMessageHandler } from '../wsClient.js'
 import { playDoneSound, setSoundEnabled } from '../notificationSound.js'
 
 export interface SubagentCharacter {
@@ -15,6 +15,7 @@ export interface SubagentCharacter {
   parentAgentId: number
   parentToolId: string
   label: string
+  name?: string
 }
 
 export interface FurnitureAsset {
@@ -74,7 +75,7 @@ export function useExtensionMessages(
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
-    let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string }> = []
+    let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string; model?: string; projectName?: string; gitBranch?: string; teamName?: string }> = []
 
     const handler = (e: MessageEvent) => {
       const msg = e.data
@@ -97,7 +98,9 @@ export function useExtensionMessages(
         }
         // Add buffered agents now that layout (and seats) are correct
         for (const p of pendingAgents) {
-          os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true)
+          const meta = (p.model || p.projectName || p.gitBranch || p.teamName)
+            ? { model: p.model, projectName: p.projectName, gitBranch: p.gitBranch, teamName: p.teamName } : undefined
+          os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, meta)
         }
         pendingAgents = []
         layoutReadyRef.current = true
@@ -139,11 +142,11 @@ export function useExtensionMessages(
         os.removeAgent(id)
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[]
-        const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string }>
+        const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string; model?: string; projectName?: string; gitBranch?: string; teamName?: string }>
         // Buffer agents — they'll be added in layoutLoaded after seats are built
         for (const id of incoming) {
           const m = meta[id]
-          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId })
+          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId, model: m?.model, projectName: m?.projectName, gitBranch: m?.gitBranch, teamName: m?.teamName })
         }
         setAgents((prev) => {
           const ids = new Set(prev)
@@ -171,10 +174,12 @@ export function useExtensionMessages(
         // Create sub-agent character for Task tool subtasks
         if (status.startsWith('Subtask:')) {
           const label = status.slice('Subtask:'.length).trim()
-          const subId = os.addSubagent(id, toolId)
+          const agentName = msg.agentName as string | undefined
+          const teamName = msg.teamName as string | undefined
+          const subId = os.addSubagent(id, toolId, agentName, teamName)
           setSubagentCharacters((prev) => {
             if (prev.some((s) => s.id === subId)) return prev
-            return [...prev, { id: subId, parentAgentId: id, parentToolId: toolId, label }]
+            return [...prev, { id: subId, parentAgentId: id, parentToolId: toolId, label, name: agentName }]
           })
         }
       } else if (msg.type === 'agentToolDone') {
@@ -327,6 +332,14 @@ export function useExtensionMessages(
         const sprites = msg.sprites as string[][][]
         console.log(`[Webview] Received ${sprites.length} wall tile sprites`)
         setWallSprites(sprites)
+      } else if (msg.type === 'agentMeta') {
+        const id = msg.id as number
+        const meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string } = {}
+        if (msg.model) meta.model = msg.model as string
+        if (msg.projectName) meta.projectName = msg.projectName as string
+        if (msg.gitBranch) meta.gitBranch = msg.gitBranch as string
+        if (msg.teamName) meta.teamName = msg.teamName as string
+        os.updateAgentMeta(id, meta)
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean
         setSoundEnabled(soundOn)
@@ -343,9 +356,9 @@ export function useExtensionMessages(
         }
       }
     }
-    window.addEventListener('message', handler)
+    addWsMessageHandler(handler)
     vscode.postMessage({ type: 'webviewReady' })
-    return () => window.removeEventListener('message', handler)
+    return () => removeWsMessageHandler(handler)
   }, [getOfficeState])
 
   return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets }

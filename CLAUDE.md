@@ -1,21 +1,20 @@
-# Pixel Agents — Compressed Reference
+# Pixel Agents Web — Compressed Reference
 
-VS Code extension with embedded React webview: pixel art office where AI agents (Claude Code terminals) are animated characters.
+Standalone web app (Express + WebSocket + React): pixel art office where AI agents (Claude Code sessions) are animated characters. Auto-discovers all active Claude Code sessions from JSONL transcript files.
 
 ## Architecture
 
 ```
-src/                          — Extension backend (Node.js, VS Code API)
-  constants.ts                — All backend magic numbers/strings (timing, truncation, asset parsing, VS Code IDs)
-  extension.ts                — Entry: activate(), deactivate()
-  PixelAgentsViewProvider.ts   — WebviewViewProvider, message dispatch, asset loading
+server/                       — Standalone Node.js server (Express + WebSocket)
+  server.ts                   — Entry: Express HTTP server + WebSocket, asset loading, client state sync
+  constants.ts                — All server magic numbers/strings (timing, truncation, asset parsing)
   assetLoader.ts              — PNG parsing, sprite conversion, catalog building, default layout loading
-  agentManager.ts             — Terminal lifecycle: launch, remove, restore, persist
-  layoutPersistence.ts        — User-level layout file I/O (~/.pixel-agents/layout.json), migration, cross-window watching
-  fileWatcher.ts              — fs.watch + polling, readNewLines, /clear detection, terminal adoption
-  transcriptParser.ts         — JSONL parsing: tool_use/tool_result → webview messages
+  layoutPersistence.ts        — User-level layout file I/O (~/.pixel-agents/layout.json), cross-window watching
+  fileWatcher.ts              — fs.watch + polling, readNewLines, JSONL session adoption, team member detection
+  transcriptParser.ts         — JSONL parsing: tool_use/tool_result → WebSocket messages, metadata extraction
   timerManager.ts             — Waiting/permission timer logic
-  types.ts                    — Shared interfaces (AgentState, PersistedAgent)
+  wsManager.ts                — WebSocket client management and broadcasting
+  types.ts                    — Shared interfaces (AgentState, MessageSink)
 
 webview-ui/src/               — React + TypeScript (Vite)
   constants.ts                — All webview magic numbers/strings (grid, animation, rendering, camera, zoom, editor, game logic, notification sound)
@@ -71,13 +70,15 @@ scripts/                      — 7-stage asset extraction pipeline
 
 ## Core Concepts
 
-**Vocabulary**: Terminal = VS Code terminal running Claude. Session = JSONL conversation file. Agent = webview character bound 1:1 to a terminal.
+**Vocabulary**: Session = JSONL conversation file. Agent = animated character bound 1:1 to a JSONL session.
 
-**Extension ↔ Webview**: `postMessage` protocol. Key messages: `openClaude`, `agentCreated/Closed`, `focusAgent`, `agentToolStart/Done/Clear`, `agentStatus`, `existingAgents`, `layoutLoaded`, `furnitureAssetsLoaded`, `floorTilesLoaded`, `wallTilesLoaded`, `saveLayout`, `saveAgentSeats`, `exportLayout`, `importLayout`, `settingsLoaded`, `setSoundEnabled`.
+**Server ↔ Browser**: WebSocket protocol. Key messages: `agentCreated/Closed`, `agentToolStart/Done/Clear`, `agentStatus`, `agentMeta`, `existingAgents`, `layoutLoaded`, `furnitureAssetsLoaded`, `floorTilesLoaded`, `wallTilesLoaded`, `saveLayout`, `settingsLoaded`, `setSoundEnabled`.
 
-**One-agent-per-terminal**: Each "+ Agent" click → new terminal (`claude --session-id <uuid>`) → immediate agent creation → 1s poll for `<uuid>.jsonl` → file watching starts.
+**Auto-discovery**: Server scans all `~/.claude/projects/*/` directories for JSONL files. Active sessions (modified within 5 minutes) are adopted on startup. New files detected by 2s polling.
 
-**Terminal adoption**: Project-level 1s scan detects unknown JSONL files. If active terminal has no agent → adopt. If focused agent exists → reassign (`/clear` handling).
+**Team member adoption**: After initial adoption, `adoptTeamMembers()` reads the first line of non-adopted JSONL files to check `teamName`. Files matching active teams are adopted regardless of age.
+
+**Agent metadata**: JSONL records contain top-level `teamName` and `gitBranch` fields on ALL record types. Model is extracted from `assistant` records (`message.model`). Project name is derived from the project directory path. All metadata is sent to clients via `agentMeta` messages.
 
 ## Agent Status Tracking
 
@@ -87,9 +88,9 @@ JSONL transcripts at `~/.claude/projects/<project-hash>/<session-id>.jsonl`. Pro
 
 **File watching**: Hybrid `fs.watch` + 2s polling backup. Partial line buffering for mid-write reads. Tool done messages delayed 300ms to prevent flicker.
 
-**Extension state per agent**: `id, terminalRef, projectDir, jsonlFile, fileOffset, lineBuffer, activeToolIds, activeToolStatuses, activeSubagentToolNames, isWaiting`.
+**Server state per agent**: `id, projectDir, jsonlFile, fileOffset, lineBuffer, activeToolIds, activeToolStatuses, activeSubagentToolNames, isWaiting, model, projectName, gitBranch, teamName`.
 
-**Persistence**: Agents persisted to `workspaceState` key `'pixel-agents.agents'` (includes palette/hueShift/seatId). **Layout persisted to `~/.pixel-agents/layout.json`** (user-level, shared across all VS Code windows/workspaces). `layoutPersistence.ts` handles all file I/O: `readLayoutFromFile()`, `writeLayoutToFile()` (atomic via `.tmp` + rename), `migrateAndLoadLayout()` (checks file → migrates old workspace state → falls back to bundled default), `watchLayoutFile()` (hybrid `fs.watch` + 2s polling for cross-window sync). On save, `markOwnWrite()` prevents the watcher from re-reading our own write. External changes push `layoutLoaded` to the webview; skipped if the editor has unsaved changes (last-save-wins). On webview ready: `restoreAgents()` matches persisted entries to live terminals. `nextAgentId`/`nextTerminalIndex` advanced past restored values. **Default layout**: When no saved layout file exists and no workspace state to migrate, a bundled `default-layout.json` is loaded from `assets/` and written to the file. If that also doesn't exist, `createDefaultLayout()` generates a basic office. To update the default: run "Pixel Agents: Export Layout as Default" from the command palette (writes current layout to `webview-ui/public/assets/default-layout.json`), then rebuild. **Export/Import**: Settings modal offers Export Layout (save dialog → JSON file) and Import Layout (open dialog → validates `version: 1` + `tiles` array → writes to layout file + pushes `layoutLoaded` to webview).
+**Persistence**: Agents are ephemeral (auto-discovered from JSONL files, not persisted). **Layout persisted to `~/.pixel-agents/layout.json`**. `layoutPersistence.ts` handles all file I/O: `readLayoutFromFile()`, `writeLayoutToFile()` (atomic via `.tmp` + rename), `watchLayoutFile()` (hybrid `fs.watch` + 2s polling for cross-client sync). On save, `markOwnWrite()` prevents the watcher from re-reading our own write. External changes push `layoutLoaded` to all WebSocket clients. **Default layout**: When no saved layout file exists, a bundled `default-layout.json` is loaded from `assets/` and written to the file. If that also doesn't exist, `createDefaultLayout()` generates a basic office.
 
 ## Office UI
 
@@ -174,8 +175,9 @@ Toggle via "Layout" button. Tools: SELECT (default), Floor paint, Wall paint, Er
 
 ```sh
 npm install && cd webview-ui && npm install && cd .. && npm run build
+npm start    # → http://localhost:3333
 ```
-Build: type-check → lint → esbuild (extension) → vite (webview). F5 for Extension Dev Host.
+Build: tsc (server) → vite (webview) → copy assets. `npm run dev` = build + start.
 
 ## TypeScript Constraints
 
@@ -208,6 +210,8 @@ All magic numbers and strings are centralized — never add inline constants to 
 
 ## Key Decisions
 
-- `WebviewViewProvider` (not `WebviewPanel`) — lives in panel area alongside terminal
-- Inline esbuild problem matcher (no extra extension needed)
+- Standalone Express + WebSocket server replaces VS Code extension host
+- `wsClient.ts` wraps WebSocket with same `vscode.postMessage()` API for minimal frontend changes
+- `vscodeApi.ts` re-exports from `wsClient.ts` — existing imports unchanged
 - Webview is separate Vite project with own `node_modules`/`tsconfig`
+- All `~/.claude/projects/*/` directories scanned for JSONL sessions (no terminal management)

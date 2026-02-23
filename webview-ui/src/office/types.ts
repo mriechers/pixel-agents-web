@@ -183,6 +183,16 @@ export interface Character {
   bubbleTimer: number
   /** Timer to stay seated while inactive after seat reassignment (counts down to 0) */
   seatTimer: number
+  /** Sub-agent role name from Task tool input.name */
+  agentName?: string
+  /** Short model name (opus/sonnet/haiku) */
+  model?: string
+  /** Project folder name */
+  projectName?: string
+  /** Git branch name */
+  gitBranch?: string
+  /** Team name if part of a multi-agent team */
+  teamName?: string
   /** Whether this character represents a sub-agent (spawned by Task tool) */
   isSubagent: boolean
   /** Parent agent ID if this is a sub-agent, null otherwise */
