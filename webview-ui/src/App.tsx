@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { OfficeState } from './office/engine/officeState.js'
 import { OfficeCanvas } from './office/components/OfficeCanvas.js'
 import { ToolOverlay } from './office/components/ToolOverlay.js'
@@ -15,6 +15,9 @@ import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { AgentLabels } from './components/AgentLabels.js'
 import { DebugView } from './components/DebugView.js'
+import { ContextMenu } from './components/ContextMenu.js'
+import { Minimap } from './components/Minimap.js'
+import { AgentListPanel } from './components/AgentListPanel.js'
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null }
@@ -125,14 +128,35 @@ function App() {
   const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [isAgentListOpen, setIsAgentListOpen] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ agentId: number; x: number; y: number } | null>(null)
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
+  const handleToggleAgentList = useCallback(() => setIsAgentListOpen(prev => !prev), [])
+  const handleFollowAgent = useCallback((id: number) => {
+    const os = getOfficeState()
+    os.selectedAgentId = id
+    os.cameraFollowId = id
+  }, [])
 
   const handleSelectAgent = useCallback((id: number) => {
     vscode.postMessage({ type: 'focusAgent', id })
   }, [])
 
   const containerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+      }
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const [editorTickForKeyboard, setEditorTickForKeyboard] = useState(0)
   useEditorKeyboard(
@@ -149,6 +173,10 @@ function App() {
 
   const handleCloseAgent = useCallback((id: number) => {
     vscode.postMessage({ type: 'closeAgent', id })
+  }, [])
+
+  const handleCanvasContextMenu = useCallback((agentId: number, x: number, y: number) => {
+    setContextMenu({ agentId, x, y })
   }, [])
 
   const handleClick = useCallback((agentId: number) => {
@@ -209,9 +237,18 @@ function App() {
         zoom={editor.zoom}
         onZoomChange={editor.handleZoomChange}
         panRef={editor.panRef}
+        onContextMenu={handleCanvasContextMenu}
       />
 
       <ZoomControls zoom={editor.zoom} onZoomChange={editor.handleZoomChange} />
+
+      <Minimap
+        officeState={officeState}
+        zoom={editor.zoom}
+        panRef={editor.panRef}
+        canvasWidth={containerSize.width}
+        canvasHeight={containerSize.height}
+      />
 
       {/* Vignette overlay */}
       <div
@@ -224,11 +261,50 @@ function App() {
         }}
       />
 
+      {contextMenu && (() => {
+        const ch = officeState.characters.get(contextMenu.agentId)
+        if (!ch) return null
+        const isSub = ch.isSubagent
+        const items: Array<{ label: string; onClick: () => void; danger?: boolean }> = []
+
+        items.push({
+          label: 'Follow',
+          onClick: () => {
+            officeState.selectedAgentId = contextMenu.agentId
+            officeState.cameraFollowId = contextMenu.agentId
+          },
+        })
+        items.push({
+          label: 'Go to seat',
+          onClick: () => {
+            officeState.sendToSeat(contextMenu.agentId)
+          },
+        })
+        if (!isSub) {
+          items.push({
+            label: 'Stop agent',
+            onClick: () => handleCloseAgent(contextMenu.agentId),
+            danger: true,
+          })
+        }
+
+        return (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={items}
+            onClose={() => setContextMenu(null)}
+          />
+        )
+      })()}
+
       <BottomToolbar
         isEditMode={editor.isEditMode}
         onToggleEditMode={editor.handleToggleEditMode}
         isDebugMode={isDebugMode}
         onToggleDebugMode={handleToggleDebugMode}
+        isAgentListOpen={isAgentListOpen}
+        onToggleAgentList={handleToggleAgentList}
       />
 
       {editor.isEditMode && editor.isDirty && (
@@ -315,6 +391,20 @@ function App() {
           onSelectAgent={handleSelectAgent}
         />
       )}
+
+      {isAgentListOpen && (
+        <AgentListPanel
+          officeState={officeState}
+          agents={agents}
+          agentStatuses={agentStatuses}
+          agentTools={agentTools}
+          subagentCharacters={subagentCharacters}
+          onFollowAgent={handleFollowAgent}
+          onStopAgent={handleCloseAgent}
+          onClose={() => setIsAgentListOpen(false)}
+        />
+      )}
+
     </div>
   )
 }

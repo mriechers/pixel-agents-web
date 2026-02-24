@@ -111,3 +111,40 @@ export const CHARACTER_HIT_HALF_WIDTH = 8
 export const CHARACTER_HIT_HEIGHT = 24
 export const TOOL_OVERLAY_VERTICAL_OFFSET = 32
 export const PULSE_ANIMATION_DURATION_SEC = 1.5
+
+// ── Connection Lines ────────────────────────────────────
+export const CONNECTION_LINE_DASH = [4, 4] as const
+export const CONNECTION_LINE_ALPHA = 0.3
+export const CONNECTION_LINE_WIDTH = 1
+export const PALETTE_LINE_COLORS = ['#e06060', '#60a0e0', '#60c080', '#c080e0', '#e0c060', '#e08060']
+
+// ── Sub-agent Meeting ───────────────────────────────────
+export const SUBAGENT_MEETING_CHANCE = 0.4
+
+// ── Team Halos ──────────────────────────────────────────────
+export const TEAM_HALO_RADIUS_X = 10
+export const TEAM_HALO_RADIUS_Y = 5
+export const TEAM_HALO_ALPHA = 0.35
+export const TEAM_HALO_Y_OFFSET = 0
+
+// ── Minimap ─────────────────────────────────────────────────
+export const MINIMAP_SCALE = 2
+export const MINIMAP_PADDING = 4
+export const MINIMAP_DOT_SIZE = 3
+export const MINIMAP_BG = 'rgba(30, 30, 46, 0.9)'
+export const MINIMAP_FLOOR_COLOR = '#3a3a5a'
+export const MINIMAP_WALL_COLOR = '#2a2a40'
+export const MINIMAP_VIEWPORT_COLOR = 'rgba(255, 255, 255, 0.4)'
+
+// ── Thought Bubbles ─────────────────────────────────────────
+export const THOUGHT_BUBBLE_TOOL_MAP: Record<string, string> = {
+  Read: 'Reading...',
+  Write: 'Writing...',
+  Edit: 'Editing...',
+  Bash: 'Running...',
+  Grep: 'Searching...',
+  Glob: 'Finding files...',
+  WebFetch: 'Fetching...',
+  WebSearch: 'Searching web...',
+  Task: 'Delegating...',
+}

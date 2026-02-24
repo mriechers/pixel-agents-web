@@ -4,16 +4,6 @@ import type { SubagentCharacter } from '../hooks/useExtensionMessages.js'
 import { TILE_SIZE, CharacterState } from '../office/types.js'
 import { TOOL_OVERLAY_VERTICAL_OFFSET, CHARACTER_SITTING_OFFSET_PX } from '../constants.js'
 
-/** Simple hash → hue for consistent team colors */
-function teamColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const hue = ((hash % 360) + 360) % 360
-  return `hsl(${hue}, 70%, 65%)`
-}
-
 interface AgentLabelsProps {
   officeState: OfficeState
   agents: number[]
@@ -100,73 +90,49 @@ export function AgentLabels({
           ? (ch.agentName || subNameMap.get(id) || `Agent #${id}`)
           : (ch.projectName || `Agent #${id}`)
 
-        // Build info line: model + git branch
-        const infoParts: string[] = []
-        if (ch.model && !isSub) infoParts.push(ch.model)
-        if (ch.gitBranch && !isSub) infoParts.push(ch.gitBranch)
-        const infoText = infoParts.join(' · ')
-
         return (
           <div
             key={id}
             style={{
               position: 'absolute',
               left: screenX,
-              top: screenY - 24,
+              top: screenY - 8,
               transform: 'translateX(-50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
               pointerEvents: 'none',
               zIndex: 40,
             }}
           >
-            {/* Main label box — pixel-art style matching ToolOverlay */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 4,
                 background: 'var(--pixel-bg)',
                 border: '2px solid var(--pixel-border)',
                 borderRadius: 0,
-                padding: '3px 8px',
+                padding: '2px 6px',
                 boxShadow: 'var(--pixel-shadow)',
                 whiteSpace: 'nowrap',
-                maxWidth: 220,
+                maxWidth: 160,
               }}
             >
               {dotColor && (
                 <span
                   className={isActive && !isWaiting ? 'pixel-agents-pulse' : undefined}
                   style={{
-                    width: 6,
-                    height: 6,
+                    width: 5,
+                    height: 5,
                     borderRadius: '50%',
                     background: dotColor,
                     flexShrink: 0,
                   }}
                 />
               )}
-              {ch.teamName && (
-                <span
-                  style={{
-                    fontSize: isSub ? '16px' : '18px',
-                    color: teamColor(ch.teamName),
-                    flexShrink: 0,
-                  }}
-                >
-                  {ch.teamName}
-                </span>
-              )}
-              {ch.teamName && (
-                <span style={{ color: 'var(--pixel-border-light)', fontSize: '18px' }}>·</span>
-              )}
               <span
                 style={{
-                  fontSize: isSub ? '20px' : '22px',
+                  fontSize: isSub ? '16px' : '18px',
                   fontStyle: isSub ? 'italic' : undefined,
-                  color: 'rgba(255, 255, 255, 0.85)',
+                  color: 'rgba(255, 255, 255, 0.8)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
@@ -174,26 +140,6 @@ export function AgentLabels({
                 {labelText}
               </span>
             </div>
-            {/* Info line below: model · branch */}
-            {infoText && (
-              <div
-                style={{
-                  fontSize: '16px',
-                  color: 'rgba(255, 255, 255, 0.45)',
-                  background: 'var(--pixel-bg)',
-                  border: '2px solid var(--pixel-border)',
-                  borderTop: 'none',
-                  borderRadius: 0,
-                  padding: '1px 8px 3px',
-                  whiteSpace: 'nowrap',
-                  maxWidth: 220,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {infoText}
-              </div>
-            )}
           </div>
         )
       })}

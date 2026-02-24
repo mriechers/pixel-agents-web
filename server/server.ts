@@ -18,7 +18,8 @@ import {
 import type { LoadedAssets, LoadedFloorTiles, LoadedWallTiles, LoadedCharacterSprites } from './assetLoader.js';
 import { loadLayout, writeLayoutToFile, readLayoutFromFile, watchLayoutFile } from './layoutPersistence.js';
 import type { LayoutWatcher } from './layoutPersistence.js';
-import { ensureProjectScan } from './fileWatcher.js';
+import { ensureProjectScan, removeAgent } from './fileWatcher.js';
+import { findProcessForFile, killProcess } from './processKiller.js';
 import { DEFAULT_PORT } from './constants.js';
 
 // ── Resolve the project root (repo root) ────────────────────
@@ -199,7 +200,29 @@ function handleClientMessage(data: string): void {
 		} else if (message.type === 'focusAgent') {
 			// No-op — no terminals to focus
 		} else if (message.type === 'closeAgent') {
-			// No-op — agents are auto-discovered from JSONL
+			const id = message.id as number;
+			const agent = agents.get(id);
+			if (agent) {
+				console.log(`[Server] Attempting to stop agent ${id} (${agent.jsonlFile})`);
+				findProcessForFile(agent.jsonlFile).then(async (pid) => {
+					if (pid) {
+						console.log(`[Server] Found PID ${pid} for agent ${id}, sending SIGINT`);
+						const killed = await killProcess(pid);
+						if (killed) {
+							console.log(`[Server] Sent SIGINT to PID ${pid}`);
+						} else {
+							console.log(`[Server] Failed to send SIGINT to PID ${pid}`);
+						}
+					} else {
+						console.log(`[Server] No process found for agent ${id}, removing from tracking`);
+					}
+					// Remove from tracking regardless
+					removeAgent(id, agents, fileWatchers, pollingTimers, waitingTimers, permissionTimers);
+					wsManager.postMessage({ type: 'agentClosed', id });
+				}).catch(err => {
+					console.error(`[Server] Error stopping agent ${id}:`, err);
+				});
+			}
 		} else if (message.type === 'openClaude') {
 			// No-op — agents are auto-discovered from JSONL
 		} else if (message.type === 'openSessionsFolder') {

@@ -12,6 +12,9 @@ import {
   CHARACTER_SITTING_OFFSET_PX,
   CHARACTER_HIT_HALF_WIDTH,
   CHARACTER_HIT_HEIGHT,
+  SUBAGENT_MEETING_CHANCE,
+  WANDER_PAUSE_MIN_SEC,
+  WANDER_PAUSE_MAX_SEC,
 } from '../../constants.js'
 import type { Character, Seat, FurnitureInstance, TileType as TileTypeVal, OfficeLayout, PlacedFurniture } from '../types.js'
 import { createCharacter, updateCharacter } from './characters.js'
@@ -538,7 +541,40 @@ export class OfficeState {
     if (meta.model !== undefined) ch.model = meta.model
     if (meta.projectName !== undefined) ch.projectName = meta.projectName
     if (meta.gitBranch !== undefined) ch.gitBranch = meta.gitBranch
-    if (meta.teamName !== undefined) ch.teamName = meta.teamName
+    if (meta.teamName !== undefined) {
+      const hadTeamName = !!ch.teamName
+      ch.teamName = meta.teamName
+      // When teamName is first set, reposition near existing team members
+      if (!hadTeamName && meta.teamName) {
+        this.repositionNearTeam(ch)
+      }
+    }
+  }
+
+  /** Reposition a character to a free seat near their team members */
+  private repositionNearTeam(ch: Character): void {
+    if (!ch.teamName) return
+    const seatId = this.findFreeSeatNearTeam(ch.teamName)
+    if (!seatId) return
+    const newSeat = this.seats.get(seatId)
+    if (!newSeat) return
+    // Skip if already at this seat
+    if (ch.seatId === seatId) return
+    // Free old seat
+    if (ch.seatId) {
+      const oldSeat = this.seats.get(ch.seatId)
+      if (oldSeat) oldSeat.assigned = false
+    }
+    // Assign new seat and snap to position
+    newSeat.assigned = true
+    ch.seatId = seatId
+    ch.tileCol = newSeat.seatCol
+    ch.tileRow = newSeat.seatRow
+    ch.x = newSeat.seatCol * TILE_SIZE + TILE_SIZE / 2
+    ch.y = newSeat.seatRow * TILE_SIZE + TILE_SIZE / 2
+    ch.dir = newSeat.facingDir
+    ch.path = []
+    ch.moveProgress = 0
   }
 
   setAgentActive(id: number, active: boolean): void {
@@ -678,6 +714,41 @@ export class OfficeState {
           }
         }
         continue // skip normal FSM while effect is active
+      }
+
+      // Sub-agent meeting: when an idle sub-agent's wander timer is about to fire,
+      // sometimes redirect them toward their parent instead of a random tile
+      if (ch.isSubagent && ch.parentAgentId !== null
+          && ch.state === CharacterState.IDLE && !ch.isActive
+          && ch.wanderTimer > 0 && ch.wanderTimer - dt <= 0) {
+        if (Math.random() < SUBAGENT_MEETING_CHANCE) {
+          const parent = this.characters.get(ch.parentAgentId)
+          if (parent) {
+            const adj = [
+              { col: parent.tileCol - 1, row: parent.tileRow },
+              { col: parent.tileCol + 1, row: parent.tileRow },
+              { col: parent.tileCol, row: parent.tileRow - 1 },
+              { col: parent.tileCol, row: parent.tileRow + 1 },
+            ].filter(t => isWalkable(t.col, t.row, this.tileMap, this.blockedTiles))
+            if (adj.length > 0) {
+              const target = adj[Math.floor(Math.random() * adj.length)]
+              const path = this.withOwnSeatUnblocked(ch, () =>
+                findPath(ch.tileCol, ch.tileRow, target.col, target.row, this.tileMap, this.blockedTiles)
+              )
+              if (path.length > 0) {
+                ch.path = path
+                ch.moveProgress = 0
+                ch.state = CharacterState.WALK
+                ch.frame = 0
+                ch.frameTimer = 0
+                ch.wanderCount++
+                // Reset wander timer so normal updateCharacter doesn't also trigger a walk
+                ch.wanderTimer = WANDER_PAUSE_MIN_SEC + Math.random() * (WANDER_PAUSE_MAX_SEC - WANDER_PAUSE_MIN_SEC)
+                continue
+              }
+            }
+          }
+        }
       }
 
       // Temporarily unblock own seat so character can pathfind to it

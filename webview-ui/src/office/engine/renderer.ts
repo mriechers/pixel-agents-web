@@ -38,6 +38,14 @@ import {
   SELECTION_HIGHLIGHT_COLOR,
   DELETE_BUTTON_BG,
   ROTATE_BUTTON_BG,
+  TEAM_HALO_RADIUS_X,
+  TEAM_HALO_RADIUS_Y,
+  TEAM_HALO_ALPHA,
+  TEAM_HALO_Y_OFFSET,
+  CONNECTION_LINE_DASH,
+  CONNECTION_LINE_ALPHA,
+  CONNECTION_LINE_WIDTH,
+  PALETTE_LINE_COLORS,
 } from '../../constants.js'
 
 // ── Render functions ────────────────────────────────────────────
@@ -89,6 +97,14 @@ export function renderTileGrid(
 
 }
 
+function teamHue(name: string): number {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return ((hash % 360) + 360) % 360
+}
+
 interface ZDrawable {
   zY: number
   draw: (ctx: CanvasRenderingContext2D) => void
@@ -134,6 +150,27 @@ export function renderScene(
     // in front of same-row furniture (e.g. chairs) but behind furniture
     // at lower rows (e.g. desks, bookshelves that occlude from below).
     const charZY = ch.y + TILE_SIZE / 2 + CHARACTER_Z_SORT_OFFSET
+
+    // Team halo: colored ellipse at character's feet (skip during matrix effects)
+    if (ch.teamName && !ch.matrixEffect) {
+      const haloHue = teamHue(ch.teamName)
+      const haloColor = `hsla(${haloHue}, 70%, 55%, ${TEAM_HALO_ALPHA})`
+      const haloX = Math.round(offsetX + ch.x * zoom)
+      const haloY = Math.round(offsetY + (ch.y + sittingOffset + TEAM_HALO_Y_OFFSET) * zoom)
+      const haloRx = TEAM_HALO_RADIUS_X * zoom
+      const haloRy = TEAM_HALO_RADIUS_Y * zoom
+      drawables.push({
+        zY: charZY - 0.002,
+        draw: (c) => {
+          c.save()
+          c.beginPath()
+          c.ellipse(haloX, haloY, haloRx, haloRy, 0, 0, Math.PI * 2)
+          c.fillStyle = haloColor
+          c.fill()
+          c.restore()
+        },
+      })
+    }
 
     // Matrix spawn/despawn effect — skip outline, use per-pixel rendering
     if (ch.matrixEffect) {
@@ -223,6 +260,41 @@ export function renderSeatIndicators(
     ctx.fillRect(x, y, s, s)
     break
   }
+}
+
+// ── Connection lines between parent and sub-agents ──────────────
+
+export function renderConnectionLines(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  subagentMeta: Map<number, { parentAgentId: number; parentToolId: string }>,
+  characterMap: Map<number, Character>,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  if (subagentMeta.size === 0) return
+  ctx.save()
+  ctx.lineWidth = CONNECTION_LINE_WIDTH
+  ctx.setLineDash([...CONNECTION_LINE_DASH])
+  for (const ch of characters) {
+    if (!ch.isSubagent || ch.parentAgentId === null) continue
+    if (ch.matrixEffect) continue
+    const parent = characterMap.get(ch.parentAgentId)
+    if (!parent || parent.matrixEffect) continue
+    const color = PALETTE_LINE_COLORS[parent.palette % PALETTE_LINE_COLORS.length]
+    ctx.strokeStyle = color
+    ctx.globalAlpha = CONNECTION_LINE_ALPHA
+    const fromX = Math.round(offsetX + parent.x * zoom)
+    const fromY = Math.round(offsetY + parent.y * zoom)
+    const toX = Math.round(offsetX + ch.x * zoom)
+    const toY = Math.round(offsetY + ch.y * zoom)
+    ctx.beginPath()
+    ctx.moveTo(fromX, fromY)
+    ctx.lineTo(toX, toY)
+    ctx.stroke()
+  }
+  ctx.restore()
 }
 
 // ── Edit mode overlays ──────────────────────────────────────────
@@ -524,6 +596,7 @@ export interface SelectionRenderState {
   hoveredTile: { col: number; row: number } | null
   seats: Map<string, Seat>
   characters: Map<number, Character>
+  subagentMeta: Map<number, { parentAgentId: number; parentToolId: string }>
 }
 
 export function renderFrame(
@@ -561,6 +634,11 @@ export function renderFrame(
   // Seat indicators (below furniture/characters, on top of floor)
   if (selection) {
     renderSeatIndicators(ctx, selection.seats, selection.characters, selection.selectedAgentId, selection.hoveredTile, offsetX, offsetY, zoom)
+  }
+
+  // Connection lines between parent and sub-agents (below z-sorted entities)
+  if (selection) {
+    renderConnectionLines(ctx, characters, selection.subagentMeta, selection.characters, offsetX, offsetY, zoom)
   }
 
   // Build wall instances for z-sorting with furniture and characters
