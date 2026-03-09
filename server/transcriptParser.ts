@@ -23,6 +23,18 @@ export function extractShortModelName(model: string): string {
 	return model;
 }
 
+export function detectProviderFromModel(model: string): 'claude' | 'codex' | 'gemini' | 'unknown' {
+	const normalized = model.toLowerCase();
+	if (normalized.includes('gpt') || normalized.includes('o1') || normalized.includes('o3') || normalized.includes('o4') || normalized.includes('codex')) {
+		return 'codex';
+	}
+	if (normalized.includes('gemini')) return 'gemini';
+	if (normalized.includes('claude') || normalized.includes('opus') || normalized.includes('sonnet') || normalized.includes('haiku')) {
+		return 'claude';
+	}
+	return 'unknown';
+}
+
 export function formatToolStatus(toolName: string, input: Record<string, unknown>): string {
 	const base = (p: unknown) => typeof p === 'string' ? path.basename(p) : '';
 	switch (toolName) {
@@ -81,6 +93,11 @@ export function processTranscriptLine(
 				if (shortModel !== agent.model) {
 					agent.model = shortModel;
 					sink?.postMessage({ type: 'agentMeta', id: agentId, model: agent.model });
+				}
+				const provider = detectProviderFromModel(rawModel);
+				if (provider !== agent.provider) {
+					agent.provider = provider;
+					sink?.postMessage({ type: 'agentMeta', id: agentId, provider: agent.provider });
 				}
 			}
 

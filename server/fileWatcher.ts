@@ -6,6 +6,14 @@ import { cancelWaitingTimer, cancelPermissionTimer, clearAgentActivity } from '.
 import { processTranscriptLine } from './transcriptParser.js';
 import { FILE_WATCHER_POLL_INTERVAL_MS, PROJECT_SCAN_INTERVAL_MS, ACTIVE_SESSION_MAX_AGE_MS } from './constants.js';
 
+function detectProviderFromProjectDir(projectDir: string): 'claude' | 'codex' | 'gemini' | 'unknown' {
+	const normalized = projectDir.toLowerCase();
+	if (normalized.includes(`${path.sep}.claude${path.sep}`)) return 'claude';
+	if (normalized.includes(`${path.sep}.codex${path.sep}`)) return 'codex';
+	if (normalized.includes(`${path.sep}.gemini${path.sep}`)) return 'gemini';
+	return 'unknown';
+}
+
 export function startFileWatching(
 	agentId: number,
 	filePath: string,
@@ -272,11 +280,15 @@ function adoptJsonlFile(
 	};
 
 	agent.projectName = deriveProjectName(projectDir);
+	agent.provider = detectProviderFromProjectDir(projectDir);
 	agents.set(id, agent);
 
 	console.log(`[Pixel Agents] Agent ${id}: adopted JSONL file ${path.basename(jsonlFile)} (project: ${agent.projectName})`);
 	sink?.postMessage({ type: 'agentCreated', id });
 	sink?.postMessage({ type: 'agentMeta', id, projectName: agent.projectName });
+	if (agent.provider) {
+		sink?.postMessage({ type: 'agentMeta', id, provider: agent.provider });
+	}
 
 	startFileWatching(id, jsonlFile, agents, fileWatchers, pollingTimers, waitingTimers, permissionTimers, sink);
 	readNewLines(id, agents, waitingTimers, permissionTimers, sink);

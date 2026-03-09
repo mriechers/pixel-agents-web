@@ -6,6 +6,7 @@ export {
   MAX_ROWS,
   MATRIX_EFFECT_DURATION_SEC as MATRIX_EFFECT_DURATION,
 } from '../constants.js'
+import type { AgentProvider } from '../agentProvider.js'
 
 export const TileType = {
   WALL: 0,
@@ -193,6 +194,8 @@ export interface Character {
   gitBranch?: string
   /** Team name if part of a multi-agent team */
   teamName?: string
+  /** Agent provider family inferred from model (claude/codex/gemini) */
+  provider?: AgentProvider
   /** Whether this character represents a sub-agent (spawned by Task tool) */
   isSubagent: boolean
   /** Parent agent ID if this is a sub-agent, null otherwise */

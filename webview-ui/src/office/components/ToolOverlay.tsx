@@ -4,6 +4,7 @@ import type { OfficeState } from '../engine/officeState.js'
 import type { SubagentCharacter } from '../../hooks/useExtensionMessages.js'
 import { TILE_SIZE, CharacterState } from '../types.js'
 import { TOOL_OVERLAY_VERTICAL_OFFSET, CHARACTER_SITTING_OFFSET_PX } from '../../constants.js'
+import { providerAccent, providerLabel } from '../../agentProvider.js'
 
 interface ToolOverlayProps {
   officeState: OfficeState
@@ -116,6 +117,9 @@ export function ToolOverlay({
         const hasPermission = subHasPermission || tools?.some((t) => t.permissionWait && !t.done)
         const hasActiveTools = tools?.some((t) => !t.done)
         const isActive = ch.isActive
+        const provider = ch.provider || 'unknown'
+        const providerColor = providerAccent(provider)
+        const providerText = providerLabel(provider)
 
         let dotColor: string | null = null
         if (hasPermission) {
@@ -146,8 +150,8 @@ export function ToolOverlay({
                 gap: 5,
                 background: 'var(--pixel-bg)',
                 border: isSelected
-                  ? '2px solid var(--pixel-border-light)'
-                  : '2px solid var(--pixel-border)',
+                  ? `2px solid ${providerColor}`
+                  : `2px solid ${providerColor}`,
                 borderRadius: 0,
                 padding: isSelected ? '3px 6px 3px 8px' : '3px 8px',
                 boxShadow: 'var(--pixel-shadow)',
@@ -178,6 +182,22 @@ export function ToolOverlay({
               >
                 {activityText}
               </span>
+              {!isSub && (
+                <span
+                  style={{
+                    fontSize: '14px',
+                    color: providerColor,
+                    border: `1px solid ${providerColor}`,
+                    padding: '0 4px',
+                    lineHeight: 1.2,
+                    opacity: 0.9,
+                    flexShrink: 0,
+                  }}
+                  title={providerText}
+                >
+                  {providerText}
+                </span>
+              )}
               {isSelected && !isSub && (
                 <button
                   onClick={(e) => {

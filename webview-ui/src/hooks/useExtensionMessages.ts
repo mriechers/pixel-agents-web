@@ -75,7 +75,7 @@ export function useExtensionMessages(
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
-    let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string; model?: string; projectName?: string; gitBranch?: string; teamName?: string }> = []
+    let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string; model?: string; projectName?: string; gitBranch?: string; teamName?: string; provider?: 'claude' | 'codex' | 'gemini' | 'unknown' }> = []
 
     const handler = (e: MessageEvent) => {
       const msg = e.data
@@ -98,8 +98,8 @@ export function useExtensionMessages(
         }
         // Add buffered agents now that layout (and seats) are correct
         for (const p of pendingAgents) {
-          const meta = (p.model || p.projectName || p.gitBranch || p.teamName)
-            ? { model: p.model, projectName: p.projectName, gitBranch: p.gitBranch, teamName: p.teamName } : undefined
+          const meta = (p.model || p.projectName || p.gitBranch || p.teamName || p.provider)
+            ? { model: p.model, projectName: p.projectName, gitBranch: p.gitBranch, teamName: p.teamName, provider: p.provider } : undefined
           os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, meta)
         }
         pendingAgents = []
@@ -142,11 +142,11 @@ export function useExtensionMessages(
         os.removeAgent(id)
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[]
-        const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string; model?: string; projectName?: string; gitBranch?: string; teamName?: string }>
+        const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string; model?: string; projectName?: string; gitBranch?: string; teamName?: string; provider?: 'claude' | 'codex' | 'gemini' | 'unknown' }>
         // Buffer agents — they'll be added in layoutLoaded after seats are built
         for (const id of incoming) {
           const m = meta[id]
-          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId, model: m?.model, projectName: m?.projectName, gitBranch: m?.gitBranch, teamName: m?.teamName })
+          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId, model: m?.model, projectName: m?.projectName, gitBranch: m?.gitBranch, teamName: m?.teamName, provider: m?.provider })
         }
         setAgents((prev) => {
           const ids = new Set(prev)
@@ -334,11 +334,12 @@ export function useExtensionMessages(
         setWallSprites(sprites)
       } else if (msg.type === 'agentMeta') {
         const id = msg.id as number
-        const meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string } = {}
+        const meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string; provider?: 'claude' | 'codex' | 'gemini' | 'unknown' } = {}
         if (msg.model) meta.model = msg.model as string
         if (msg.projectName) meta.projectName = msg.projectName as string
         if (msg.gitBranch) meta.gitBranch = msg.gitBranch as string
         if (msg.teamName) meta.teamName = msg.teamName as string
+        if (msg.provider) meta.provider = msg.provider as 'claude' | 'codex' | 'gemini' | 'unknown'
         os.updateAgentMeta(id, meta)
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean

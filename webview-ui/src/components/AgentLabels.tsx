@@ -3,6 +3,7 @@ import type { OfficeState } from '../office/engine/officeState.js'
 import type { SubagentCharacter } from '../hooks/useExtensionMessages.js'
 import { TILE_SIZE, CharacterState } from '../office/types.js'
 import { TOOL_OVERLAY_VERTICAL_OFFSET, CHARACTER_SITTING_OFFSET_PX } from '../constants.js'
+import { providerAccent, providerLabel } from '../agentProvider.js'
 
 interface AgentLabelsProps {
   officeState: OfficeState
@@ -77,6 +78,8 @@ export function AgentLabels({
         const isWaiting = status === 'waiting'
         const isActive = ch.isActive
         const isSub = ch.isSubagent
+        const providerColor = providerAccent(ch.provider || 'unknown')
+        const providerShort = providerLabel(ch.provider || 'unknown').charAt(0)
 
         let dotColor: string | null = null
         if (isWaiting) {
@@ -108,7 +111,7 @@ export function AgentLabels({
                 alignItems: 'center',
                 gap: 4,
                 background: 'var(--pixel-bg)',
-                border: '2px solid var(--pixel-border)',
+                border: `2px solid ${providerColor}`,
                 borderRadius: 0,
                 padding: '2px 6px',
                 boxShadow: 'var(--pixel-shadow)',
@@ -128,6 +131,21 @@ export function AgentLabels({
                   }}
                 />
               )}
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  border: '1px solid rgba(0,0,0,0.5)',
+                  background: providerColor,
+                  color: 'rgba(0,0,0,0.75)',
+                  fontSize: 9,
+                  lineHeight: '10px',
+                  textAlign: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {providerShort}
+              </span>
               <span
                 style={{
                   fontSize: isSub ? '16px' : '18px',

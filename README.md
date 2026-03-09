@@ -1,14 +1,15 @@
 # Pixel Agents Web
 
-A standalone web app that turns your Claude Code agents into animated pixel art characters in a virtual office.
+A standalone web app that turns your CLI coding agents into animated pixel art characters in a virtual office.
 
-Based on the [Pixel Agents VS Code extension](https://marketplace.visualstudio.com/items?itemName=pablodelucca.pixel-agents), this web version runs independently in any browser. It watches Claude Code's JSONL transcript files to auto-discover all active sessions across your machine — no VS Code required.
+Based on the [Pixel Agents VS Code extension](https://marketplace.visualstudio.com/items?itemName=pablodelucca.pixel-agents), this web version runs independently in any browser. It watches agent JSONL transcript files to auto-discover active sessions across your machine — no VS Code required.
 
 ![Pixel Agents screenshot](webview-ui/public/Screenshot.jpg)
 
 ## Features
 
-- **Auto-discovery** — automatically detects all active Claude Code sessions across all projects
+- **Auto-discovery** — detects active sessions from supported CLI project roots (`~/.claude/projects`, `~/.codex/projects`, `~/.gemini/projects`)
+- **Multi-provider visuals** — Claude, Codex, and Gemini agents are visually differentiated in labels, overlays, and list view
 - **Live activity tracking** — characters animate based on what the agent is actually doing (writing, reading, running commands)
 - **Agent metadata** — labels show project name, model (opus/sonnet/haiku), and git branch for each agent
 - **Team visualization** — agents in the same Claude Code team get color-coded badges and are seated near each other
@@ -26,7 +27,7 @@ Based on the [Pixel Agents VS Code extension](https://marketplace.visualstudio.c
 ## Requirements
 
 - [Node.js](https://nodejs.org/) (LTS recommended)
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and running sessions
+- At least one supported CLI writing JSONL transcripts in a supported project root
 
 ## Getting Started
 
@@ -43,7 +44,7 @@ Then open **http://localhost:3333** in your browser. Any active Claude Code sess
 
 ### Usage
 
-1. Start one or more Claude Code sessions anywhere on your machine
+1. Start one or more supported CLI sessions (Claude Code, Codex CLI, Gemini CLI)
 2. Open **http://localhost:3333** — agents appear automatically as characters
 3. Watch characters react in real time as agents use tools
 4. Click a character to select it, then click a seat to reassign it
@@ -77,13 +78,20 @@ The extension will still work without the tileset — you'll get the default cha
 
 ## How It Works
 
-The server watches Claude Code's JSONL transcript files at `~/.claude/projects/` to track what each agent is doing. When an agent uses a tool (like writing a file or running a command), the server detects it and pushes updates to the browser via WebSocket. No modifications to Claude Code are needed — it's purely observational.
+The server watches JSONL transcript files under:
+- `~/.claude/projects/`
+- `~/.codex/projects/`
+- `~/.gemini/projects/`
+
+When an agent uses a tool (like writing a file or running a command), the server detects it and pushes updates to the browser via WebSocket.
 
 Key differences from the VS Code extension:
 - **Standalone server** — Express + WebSocket instead of VS Code Webview API
-- **Auto-discovery** — scans all `~/.claude/projects/` directories for active sessions instead of managing terminals
+- **Auto-discovery** — scans supported project roots for active sessions instead of managing terminals
 - **Team member adoption** — detects team member JSONL files (spawned by Claude Code's `Task` tool with `team_name`) and adopts them even if they're older than the normal 5-minute recency window
-- **Agent metadata** — extracts model, git branch, team name, and project name from JSONL records
+- **Agent metadata** — extracts model, provider family (Claude/Codex/Gemini), git branch, team name, and project name from JSONL records
+
+Note: Activity/status parsing is currently optimized for Claude-style transcript records. Non-Claude sessions are discovered and rendered, but detailed tool-state fidelity depends on transcript shape compatibility.
 
 The frontend runs a lightweight game loop with canvas rendering, BFS pathfinding, and a character state machine (idle -> walk -> type/read). Everything is pixel-perfect at integer zoom levels.
 

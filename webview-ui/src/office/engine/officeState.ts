@@ -28,6 +28,7 @@ import {
   getBlockedTiles,
 } from '../layout/layoutSerializer.js'
 import { getCatalogEntry, getOnStateType } from '../layout/furnitureCatalog.js'
+import { detectAgentProvider } from '../../agentProvider.js'
 
 export class OfficeState {
   layout: OfficeLayout
@@ -225,7 +226,7 @@ export class OfficeState {
     return { palette, hueShift }
   }
 
-  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, meta?: { model?: string; projectName?: string; gitBranch?: string; teamName?: string }): void {
+  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, meta?: { model?: string; projectName?: string; gitBranch?: string; teamName?: string; provider?: 'claude' | 'codex' | 'gemini' | 'unknown' }): void {
     if (this.characters.has(id)) return
 
     let palette: number
@@ -276,6 +277,11 @@ export class OfficeState {
       if (meta.projectName) ch.projectName = meta.projectName
       if (meta.gitBranch) ch.gitBranch = meta.gitBranch
       if (meta.teamName) ch.teamName = meta.teamName
+      if (meta.provider) {
+        ch.provider = meta.provider
+      } else if (meta.model) {
+        ch.provider = detectAgentProvider(meta.model)
+      }
     }
     if (!skipSpawnEffect) {
       ch.matrixEffect = 'spawn'
@@ -453,6 +459,7 @@ export class OfficeState {
     ch.parentAgentId = parentAgentId
     if (agentName) ch.agentName = agentName
     if (teamName) ch.teamName = teamName
+    if (parentCh?.provider) ch.provider = parentCh.provider
     ch.matrixEffect = 'spawn'
     ch.matrixEffectTimer = 0
     ch.matrixEffectSeeds = matrixEffectSeeds()
@@ -535,10 +542,15 @@ export class OfficeState {
   }
 
   /** Update metadata on an existing agent character */
-  updateAgentMeta(id: number, meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string }): void {
+  updateAgentMeta(id: number, meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string; provider?: 'claude' | 'codex' | 'gemini' | 'unknown' }): void {
     const ch = this.characters.get(id)
     if (!ch) return
-    if (meta.model !== undefined) ch.model = meta.model
+    if (meta.model !== undefined) {
+      ch.model = meta.model
+      if (!meta.provider) {
+        ch.provider = detectAgentProvider(meta.model)
+      }
+    }
     if (meta.projectName !== undefined) ch.projectName = meta.projectName
     if (meta.gitBranch !== undefined) ch.gitBranch = meta.gitBranch
     if (meta.teamName !== undefined) {
@@ -549,6 +561,7 @@ export class OfficeState {
         this.repositionNearTeam(ch)
       }
     }
+    if (meta.provider !== undefined) ch.provider = meta.provider
   }
 
   /** Reposition a character to a free seat near their team members */

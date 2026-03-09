@@ -51,16 +51,27 @@ let layoutWatcher: LayoutWatcher | null = null;
 
 // ── Discover project directories ─────────────────────────────
 function getProjectDirs(): string[] {
-	const claudeProjectsDir = path.join(os.homedir(), '.claude', 'projects');
-	if (!fs.existsSync(claudeProjectsDir)) return [];
-	try {
-		return fs.readdirSync(claudeProjectsDir)
-			.map(d => path.join(claudeProjectsDir, d))
-			.filter(d => {
-				try { return fs.statSync(d).isDirectory(); }
-				catch { return false; }
-			});
-	} catch { return []; }
+	const roots = [
+		path.join(os.homedir(), '.claude', 'projects'),
+		path.join(os.homedir(), '.codex', 'projects'),
+		path.join(os.homedir(), '.gemini', 'projects'),
+	];
+	const dirs: string[] = [];
+	for (const root of roots) {
+		if (!fs.existsSync(root)) continue;
+		try {
+			const children = fs.readdirSync(root)
+				.map(d => path.join(root, d))
+				.filter(d => {
+					try { return fs.statSync(d).isDirectory(); }
+					catch { return false; }
+				});
+			dirs.push(...children);
+		} catch {
+			// ignore unreadable roots
+		}
+	}
+	return dirs;
 }
 
 // ── Load all assets ──────────────────────────────────────────
@@ -128,14 +139,15 @@ function sendInitialState(clientSink: MessageSink): void {
 	// Send existing agents BEFORE layout — client buffers them
 	// and adds characters when layoutLoaded arrives
 	const agentIds: number[] = [];
-	const agentMeta: Record<number, { model?: string; projectName?: string; gitBranch?: string; teamName?: string }> = {};
+	const agentMeta: Record<number, { model?: string; projectName?: string; gitBranch?: string; teamName?: string; provider?: 'claude' | 'codex' | 'gemini' | 'unknown' }> = {};
 	for (const [id, agent] of agents) {
 		agentIds.push(id);
-		const meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string } = {};
+		const meta: { model?: string; projectName?: string; gitBranch?: string; teamName?: string; provider?: 'claude' | 'codex' | 'gemini' | 'unknown' } = {};
 		if (agent.model) meta.model = agent.model;
 		if (agent.projectName) meta.projectName = agent.projectName;
 		if (agent.gitBranch) meta.gitBranch = agent.gitBranch;
 		if (agent.teamName) meta.teamName = agent.teamName;
+		if (agent.provider) meta.provider = agent.provider;
 		if (Object.keys(meta).length > 0) {
 			agentMeta[id] = meta;
 		}

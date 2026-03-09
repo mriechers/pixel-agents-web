@@ -3,6 +3,7 @@ import type { OfficeState } from '../office/engine/officeState.js'
 import type { SubagentCharacter } from '../hooks/useExtensionMessages.js'
 import type { ToolActivity } from '../office/types.js'
 import { THOUGHT_BUBBLE_TOOL_MAP } from '../constants.js'
+import { providerAccent, providerLabel } from '../agentProvider.js'
 
 interface AgentListPanelProps {
   officeState: OfficeState
@@ -131,6 +132,8 @@ export function AgentListPanel({
             const isActive = ch.isActive
             const isWaiting = status === 'waiting'
             const subs = subsByParent.get(id) || []
+            const provider = ch.provider || 'unknown'
+            const providerColor = providerAccent(provider)
 
             // Current activity
             const tools = agentTools[id]
@@ -141,7 +144,7 @@ export function AgentListPanel({
               : (toolName && THOUGHT_BUBBLE_TOOL_MAP[toolName]) || (isActive ? 'Working...' : 'Idle')
 
             return (
-              <div key={id} style={{ borderBottom: '2px solid rgba(255,255,255,0.06)', padding: '8px 12px' }}>
+              <div key={id} style={{ borderBottom: '2px solid rgba(255,255,255,0.06)', borderLeft: `3px solid ${providerColor}`, padding: '8px 12px' }}>
                 {/* Name + status row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <span
@@ -176,6 +179,10 @@ export function AgentListPanel({
                       <span style={metaValueStyle}>{ch.model}</span>
                     </div>
                   )}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                    <span style={metaLabelStyle}>provider</span>
+                    <span style={{ ...metaValueStyle, color: providerColor }}>{providerLabel(provider)}</span>
+                  </div>
                   {ch.gitBranch && (
                     <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
                       <span style={metaLabelStyle}>branch</span>

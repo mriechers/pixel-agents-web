@@ -20,4 +20,5 @@ export interface AgentState {
 	projectName?: string;
 	gitBranch?: string;
 	teamName?: string;
+	provider?: 'claude' | 'codex' | 'gemini' | 'unknown';
 }

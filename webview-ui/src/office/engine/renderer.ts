@@ -47,6 +47,7 @@ import {
   CONNECTION_LINE_WIDTH,
   PALETTE_LINE_COLORS,
 } from '../../constants.js'
+import { providerAccent } from '../../agentProvider.js'
 
 // ── Render functions ────────────────────────────────────────────
 
@@ -150,6 +151,26 @@ export function renderScene(
     // in front of same-row furniture (e.g. chairs) but behind furniture
     // at lower rows (e.g. desks, bookshelves that occlude from below).
     const charZY = ch.y + TILE_SIZE / 2 + CHARACTER_Z_SORT_OFFSET
+
+    // Team halo: colored ellipse at character's feet (skip during matrix effects)
+    if (ch.provider && ch.provider !== 'unknown' && !ch.matrixEffect) {
+      const providerColor = providerAccent(ch.provider)
+      const haloX = Math.round(offsetX + ch.x * zoom)
+      const haloY = Math.round(offsetY + (ch.y + sittingOffset + TEAM_HALO_Y_OFFSET + 1) * zoom)
+      drawables.push({
+        zY: charZY - 0.003,
+        draw: (c) => {
+          c.save()
+          c.beginPath()
+          c.ellipse(haloX, haloY, (TEAM_HALO_RADIUS_X - 2) * zoom, (TEAM_HALO_RADIUS_Y - 2) * zoom, 0, 0, Math.PI * 2)
+          c.strokeStyle = providerColor
+          c.globalAlpha = 0.55
+          c.lineWidth = 1
+          c.stroke()
+          c.restore()
+        },
+      })
+    }
 
     // Team halo: colored ellipse at character's feet (skip during matrix effects)
     if (ch.teamName && !ch.matrixEffect) {
